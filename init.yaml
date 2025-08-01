@@ -1,4 +1,4 @@
 version: 0.0.1
-folder_path: plugins/triangulate_pose_plugin
+folder_path: plugins/triangulate_points_plugin
 type: plugin
 requirements: []
