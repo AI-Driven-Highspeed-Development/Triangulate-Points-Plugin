@@ -1,0 +1,51 @@
+{
+    "cameras": [
+        {
+            "name": "cam01",
+            "intrinsics": {
+                "fx": 525.0,
+                "fy": 525.0,
+                "cx": 320.0,
+                "cy": 240.0,
+                "width": 640,
+                "height": 480,
+                "hfov": 78.0,
+                "vfov": 62.0,
+                "k1": 0.0,
+                "k2": 0.0,
+                "p1": 0.0,
+                "p2": 0.0
+            },
+            "extrinsics": {
+                "position": [0.0, 0.0, 0.0],
+                "rotation": [0.0, 0.0, 0.0]
+            }
+        },
+        {
+            "name": "cam02",
+            "intrinsics": {
+                "fx": 525.0,
+                "fy": 525.0,
+                "cx": 320.0,
+                "cy": 240.0,
+                "width": 640,
+                "height": 480,
+                "hfov": 78.0,
+                "vfov": 62.0,
+                "k1": 0.0,
+                "k2": 0.0,
+                "p1": 0.0,
+                "p2": 0.0
+            },
+            "extrinsics": {
+                "position": [1.0, 0.0, 0.0],
+                "rotation": [0.0, 0.0, 0.0]
+            }
+        }
+    ],
+    "triangulation_settings": {
+        "min_cameras": 2,
+        "max_reprojection_error": 10.0,
+        "confidence_threshold": 0.5
+    }
+}
