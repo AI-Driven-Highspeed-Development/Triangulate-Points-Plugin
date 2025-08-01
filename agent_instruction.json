@@ -1,0 +1,16 @@
+{
+    "module_name": "snack_case_module_name",
+    "module_description": {
+        "overview": "This is a brief overview of the module.",
+        "key_features": [
+            "feature by list",
+            "can have multiple items"
+        ]
+    },
+    "usage_examples": {
+        "example_n": "one of the usage example, can have 1 - 10, base on how complex the module is"
+    },
+    "warning": {
+        "example_warning_n": "one of the warning, can have 0 - 10, only if applicable, and only project / module specific, not general ones like 'python dependency installation' etc."
+    }
+}
