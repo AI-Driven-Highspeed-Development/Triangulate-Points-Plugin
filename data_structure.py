@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List, Dict, Optional, Tuple, Union
+from typing import List, Dict, Optional
 import numpy as np
 
 @dataclass
@@ -12,6 +12,91 @@ class Point2D:
     confidence: float = 1.0
     point_id: Optional[str] = None  # Optional ID for point correspondence
     camera_name: Optional[str] = None  # Which camera this point comes from
+
+@dataclass
+class CoordinateConverter:
+    """
+    Handles conversion between normalized (0-1) and pixel coordinates.
+    """
+    width: int
+    height: int
+    
+    def normalized_to_pixel(self, normalized_x: float, normalized_y: float) -> tuple[float, float]:
+        """
+        Convert normalized coordinates (0-1 range) to pixel coordinates.
+        
+        Args:
+            normalized_x: X coordinate in range [0, 1]
+            normalized_y: Y coordinate in range [0, 1]
+            
+        Returns:
+            Tuple of (pixel_x, pixel_y)
+        """
+        return (normalized_x * self.width, normalized_y * self.height)
+    
+    def pixel_to_normalized(self, pixel_x: float, pixel_y: float) -> tuple[float, float]:
+        """
+        Convert pixel coordinates to normalized coordinates (0-1 range).
+        
+        Args:
+            pixel_x: X coordinate in pixels
+            pixel_y: Y coordinate in pixels
+            
+        Returns:
+            Tuple of (normalized_x, normalized_y)
+        """
+        return (pixel_x / self.width, pixel_y / self.height)
+    
+    def convert_point2d_to_pixel(self, point: 'Point2D') -> 'Point2D':
+        """
+        Convert a Point2D with normalized coordinates to pixel coordinates.
+        
+        Args:
+            point: Point2D with normalized coordinates
+            
+        Returns:
+            New Point2D with pixel coordinates
+        """
+        pixel_x, pixel_y = self.normalized_to_pixel(point.x, point.y)
+        return Point2D(
+            x=pixel_x,
+            y=pixel_y,
+            confidence=point.confidence,
+            point_id=point.point_id,
+            camera_name=point.camera_name
+        )
+    
+    def convert_point2d_to_normalized(self, point: 'Point2D') -> 'Point2D':
+        """
+        Convert a Point2D with pixel coordinates to normalized coordinates.
+        
+        Args:
+            point: Point2D with pixel coordinates
+            
+        Returns:
+            New Point2D with normalized coordinates
+        """
+        norm_x, norm_y = self.pixel_to_normalized(point.x, point.y)
+        return Point2D(
+            x=norm_x,
+            y=norm_y,
+            confidence=point.confidence,
+            point_id=point.point_id,
+            camera_name=point.camera_name
+        )
+    
+    @classmethod
+    def from_camera_intrinsics(cls, intrinsics: 'CameraIntrinsics') -> 'CoordinateConverter':
+        """
+        Create a CoordinateConverter from camera intrinsics.
+        
+        Args:
+            intrinsics: CameraIntrinsics object
+            
+        Returns:
+            CoordinateConverter instance
+        """
+        return cls(width=intrinsics.width, height=intrinsics.height)
 
 @dataclass
 class Point3D:
@@ -28,67 +113,27 @@ class Point3D:
 @dataclass
 class CameraIntrinsics:
     """
-    Camera intrinsic parameters.
+    Simplified camera intrinsic parameters for HFOV/VFOV based triangulation.
     """
-    fx: float  # Focal length in x
-    fy: float  # Focal length in y
-    cx: float  # Principal point x
-    cy: float  # Principal point y
     width: int  # Image width in pixels
     height: int  # Image height in pixels
     hfov: float = 78.0  # Horizontal field of view in degrees
     vfov: float = 62.0  # Vertical field of view in degrees
-    k1: float = 0.0  # Radial distortion coefficient 1
-    k2: float = 0.0  # Radial distortion coefficient 2
-    p1: float = 0.0  # Tangential distortion coefficient 1
-    p2: float = 0.0  # Tangential distortion coefficient 2
-
-    @classmethod
-    def from_fov(cls, hfov_deg: float, vfov_deg: float, width: int, height: int) -> 'CameraIntrinsics':
-        """
-        Create camera intrinsics from field of view angles.
-        
-        Args:
-            hfov_deg: Horizontal field of view in degrees
-            vfov_deg: Vertical field of view in degrees
-            width: Image width in pixels
-            height: Image height in pixels
-        """
-        hfov_rad = np.deg2rad(hfov_deg)
-        vfov_rad = np.deg2rad(vfov_deg)
-        
-        fx = (width / 2.0) / np.tan(hfov_rad / 2.0)
-        fy = (height / 2.0) / np.tan(vfov_rad / 2.0)
-        cx = width / 2.0
-        cy = height / 2.0
-        
-        return cls(
-            fx=fx, fy=fy, cx=cx, cy=cy, width=width, height=height,
-            hfov=hfov_deg, vfov=vfov_deg
-        )
-    
-    def update_focal_from_fov(self):
-        """
-        Update focal length parameters from stored FOV values.
-        Useful when FOV values are modified after creation.
-        """
-        hfov_rad = np.deg2rad(self.hfov)
-        vfov_rad = np.deg2rad(self.vfov)
-        
-        self.fx = (self.width / 2.0) / np.tan(hfov_rad / 2.0)
-        self.fy = (self.height / 2.0) / np.tan(vfov_rad / 2.0)
 
 @dataclass
 class CameraExtrinsics:
     """
     Camera extrinsic parameters (position and orientation in world space).
     """
-    position: Tuple[float, float, float]  # (x, y, z) in world coordinates
-    rotation: Tuple[float, float, float]  # Euler angles (roll, pitch, yaw) in radians
+    position: List[float]  # [x, y, z] in world coordinates
+    rotation: List[float]  # Euler angles [roll, pitch, yaw] in degrees (not radians!)
     
     def get_rotation_matrix(self) -> np.ndarray:
         """Convert Euler angles to rotation matrix."""
-        roll, pitch, yaw = self.rotation
+        # Convert degrees to radians
+        roll = np.deg2rad(self.rotation[0])
+        pitch = np.deg2rad(self.rotation[1])
+        yaw = np.deg2rad(self.rotation[2])
         
         # Rotation matrices for each axis
         Rx = np.array([
@@ -117,101 +162,47 @@ class CameraExtrinsics:
         return np.array(self.position)
 
 @dataclass
-class Camera:
+class TriangulationCamera:
     """
-    Complete camera model with intrinsics and extrinsics.
+    Complete camera model for triangulation with intrinsics and extrinsics.
+    Renamed to avoid conflicts with webcam plugin Camera class.
     """
     name: str
     intrinsics: CameraIntrinsics
     extrinsics: CameraExtrinsics
     
     @classmethod
-    def from_config(cls, config_data: dict) -> 'Camera':
+    def from_config(cls, config_data) -> 'TriangulationCamera':
         """
-        Create a Camera object from configuration data.
+        Create a TriangulationCamera object from configuration data.
+        Supports ConfigManager generated nested config format.
         
         Args:
-            config_data: Dictionary containing camera configuration
+            config_data: Configuration object with camera data from ConfigManager
             
         Returns:
-            Camera object
+            TriangulationCamera object
         """
-        intrinsics_data = config_data['intrinsics']
-        extrinsics_data = config_data['extrinsics']
+        # ConfigManager generates nested config objects with intrinsics and extrinsics as class instances
+        intrinsics_data = config_data.intrinsics
+        extrinsics_data = config_data.extrinsics
         
         intrinsics = CameraIntrinsics(
-            fx=intrinsics_data['fx'],
-            fy=intrinsics_data['fy'],
-            cx=intrinsics_data['cx'],
-            cy=intrinsics_data['cy'],
-            width=intrinsics_data['width'],
-            height=intrinsics_data['height'],
-            hfov=intrinsics_data.get('hfov', 78.0),
-            vfov=intrinsics_data.get('vfov', 62.0),
-            k1=intrinsics_data.get('k1', 0.0),
-            k2=intrinsics_data.get('k2', 0.0),
-            p1=intrinsics_data.get('p1', 0.0),
-            p2=intrinsics_data.get('p2', 0.0)
+            width=intrinsics_data.width,
+            height=intrinsics_data.height,
+            hfov=intrinsics_data.hfov,
+            vfov=intrinsics_data.vfov
         )
         
         extrinsics = CameraExtrinsics(
-            position=tuple(extrinsics_data['position']),
-            rotation=tuple(extrinsics_data['rotation'])
+            position=list(extrinsics_data.position),
+            rotation=list(extrinsics_data.rotation)
         )
         
         return cls(
-            name=config_data['name'],
+            name=config_data.name,
             intrinsics=intrinsics,
             extrinsics=extrinsics
-        )
-    
-    def get_projection_matrix(self) -> np.ndarray:
-        """
-        Get the camera projection matrix (3x4).
-        Projects 3D world points to 2D image coordinates.
-        """
-        # Intrinsic matrix (3x3)
-        K = np.array([
-            [self.intrinsics.fx, 0, self.intrinsics.cx],
-            [0, self.intrinsics.fy, self.intrinsics.cy],
-            [0, 0, 1]
-        ])
-        
-        # Rotation matrix (3x3)
-        R = self.extrinsics.get_rotation_matrix()
-        
-        # Translation vector (3x1)
-        t = self.extrinsics.get_translation_vector()
-        
-        # Extrinsic matrix [R|t] (3x4)
-        RT = np.hstack([R, t.reshape(-1, 1)])
-        
-        # Projection matrix P = K[R|t] (3x4)
-        return K @ RT
-    
-    def project_3d_to_2d(self, point_3d: Point3D) -> Point2D:
-        """Project a 3D world point to 2D image coordinates."""
-        world_point = np.array([point_3d.x, point_3d.y, point_3d.z, 1.0])
-        P = self.get_projection_matrix()
-        
-        # Add homogeneous coordinate row to make P 4x4
-        P_homo = np.vstack([P, [0, 0, 0, 1]])
-        
-        image_point_homo = P @ world_point
-        
-        # Convert from homogeneous coordinates
-        if image_point_homo[2] != 0:
-            x = image_point_homo[0] / image_point_homo[2]
-            y = image_point_homo[1] / image_point_homo[2]
-        else:
-            x = y = float('inf')
-        
-        return Point2D(
-            x=x, 
-            y=y, 
-            confidence=point_3d.confidence,
-            point_id=point_3d.point_id,
-            camera_name=self.name
         )
 
 @dataclass
@@ -239,7 +230,7 @@ class TriangulationInput:
     """
     Input data for triangulation containing cameras and point correspondences.
     """
-    cameras: Dict[str, Camera]  # Camera name -> Camera object
+    cameras: Dict[str, TriangulationCamera]  # Camera name -> TriangulationCamera object
     correspondence_sets: List[CorrespondenceSet]
     
     def validate(self) -> bool:
@@ -275,3 +266,17 @@ class TriangulationResult:
             if point.point_id == point_id:
                 return point
         return None
+
+@dataclass
+class Skeleton3D:
+    """
+    Represents a 3D skeleton, composed of a list of 3D points for each joint.
+    """
+    joints: List[Point3D]
+    
+@dataclass
+class PoseData3D:
+    """
+    Container for all the 3D skeletons reconstructed in a single frame.
+    """
+    skeletons: List[Skeleton3D]
