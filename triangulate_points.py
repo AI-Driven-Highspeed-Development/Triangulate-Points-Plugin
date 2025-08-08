@@ -2,6 +2,7 @@ import numpy as np
 import cv2
 from typing import List, Optional, Dict, Tuple
 from managers.config_manager.config_manager import ConfigManager
+from utils.logger_util.logger import get_logger
 
 from .data_structure import Point2D, Point3D, TriangulationCamera
 
@@ -15,23 +16,24 @@ class TriangulatePoints:
     
     def __init__(self):
         """Initialize with camera configuration and pre-calculates projection matrices."""
+        self.logger = get_logger("TriangulatePoints")
         self.cm = ConfigManager()
         self.cameras = self._load_cameras_from_config()
         self.projection_matrices = {}
         
-        print(f"\n=== TriangulatePoints Debug ===")
-        print(f"Loaded {len(self.cameras)} cameras:")
+        self.logger.debug("=== TriangulatePoints Debug ===")
+        self.logger.info(f"Loaded {len(self.cameras)} cameras")
         for name, camera in self.cameras.items():
-            print(f"  {name}: pos={camera.extrinsics.position}, rot={camera.extrinsics.rotation}")
-            print(f"    intrinsics: {camera.intrinsics.width}x{camera.intrinsics.height}, hfov={camera.intrinsics.hfov}°")
+            self.logger.debug(f"{name}: pos={camera.extrinsics.position}, rot={camera.extrinsics.rotation}")
+            self.logger.debug(f"  intrinsics: {camera.intrinsics.width}x{camera.intrinsics.height}, hfov={camera.intrinsics.hfov}°")
         
         if len(self.cameras) < 2:
-            print("Warning: Need at least 2 cameras for triangulation.")
+            self.logger.warning("Need at least 2 cameras for triangulation.")
         
         self._setup_projection_matrices()
         
-        print(f"Projection matrices created for: {list(self.projection_matrices.keys())}")
-        print("=== End Debug ===\n")
+        self.logger.debug(f"Projection matrices created for: {list(self.projection_matrices.keys())}")
+        self.logger.debug("=== End Debug ===")
 
     def _load_cameras_from_config(self) -> Dict[str, TriangulationCamera]:
         """Load cameras from configuration."""
@@ -43,7 +45,7 @@ class TriangulatePoints:
                     camera = TriangulationCamera.from_config(cam_config)
                     cameras[camera.name] = camera
         except AttributeError:
-            print("No triangulation camera configuration found.")
+            self.logger.warning("No triangulation camera configuration found.")
         return cameras
 
     def _setup_projection_matrices(self):
@@ -128,7 +130,7 @@ class TriangulatePoints:
             )
             
         except Exception as e:
-            print(f"Triangulation failed: {e}")
+            self.logger.error(f"Triangulation failed: {e}")
             return None
 
     def triangulate_multi_points(self, cam1_name: str, cam2_name: str,
@@ -183,7 +185,7 @@ class TriangulatePoints:
             return results
             
         except Exception as e:
-            print(f"Multi-point triangulation failed: {e}")
+            self.logger.error(f"Multi-point triangulation failed: {e}")
             return []
 
     def triangulate_multi_camera(self, points_2d: Dict[str, Point2D]) -> Optional[Point3D]:

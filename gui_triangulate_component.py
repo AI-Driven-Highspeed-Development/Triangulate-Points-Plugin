@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 import math
+import time
 from typing import List, Optional, Tuple
 from plugins.cv2_visualization_plugin.gui_component import GuiComponent
 from plugins.triangulate_points_plugin.data_structure import Point3D
@@ -26,7 +27,9 @@ class GuiTriangulateComponent(GuiComponent):
         self.rotation_z = 0.0  # No roll
         self.scale = 200.0      # Zoom level (pixels per meter)
         self.auto_rotate = auto_rotate # Auto-rotate for dynamic view
-        self.rotation_speed = 0.02
+        # Use radians per second for constant-speed rotation
+        self.rotation_speed = 0.6
+        self._last_time = time.monotonic()
         
         # Mouse interaction state
         self.mouse_dragging = False
@@ -252,10 +255,11 @@ class GuiTriangulateComponent(GuiComponent):
         rotation_matrix = self._get_rotation_matrix()
         rotated = rotation_matrix @ point_3d
         
-        # Simple orthographic projection with consistent Y-axis
-        # World coordinates: Y=UP, Screen coordinates: Y=DOWN
+        # Orthographic projection matching OpenCV convention:
+        # In cv2/image coordinates, smaller y is up; in 3D, up corresponds to negative Y.
+        # Therefore, map rotated[1] directly to screen Y (negative values go up on screen).
         screen_x = rotated[0] * self.scale + self.width // 2
-        screen_y = -rotated[1] * self.scale + self.height // 2  # Flip Y: world Y=up → screen Y=down
+        screen_y = rotated[1] * self.scale + self.height // 2
         
         return (int(screen_x), int(screen_y))
     
@@ -267,7 +271,8 @@ class GuiTriangulateComponent(GuiComponent):
         # Axis endpoints (1 meter in each direction)
         origin = np.array([0.0, 0.0, 0.0])
         x_axis = np.array([1.0, 0.0, 0.0])
-        y_axis = np.array([0.0, 1.0, 0.0])
+        # In OpenCV convention, up corresponds to -Y; draw the Y axis pointing upwards on screen
+        y_axis = np.array([0.0, -1.0, 0.0])
         z_axis = np.array([0.0, 0.0, 1.0])
         
         # Project to 2D (using local canvas coordinates)
@@ -328,7 +333,7 @@ class GuiTriangulateComponent(GuiComponent):
             rotation_deg = camera.extrinsics.rotation
             rx, ry, rz = np.radians(rotation_deg)
             
-            # Create rotation matrix (same as in triangulation)
+            # Create rotation matrix (Euler ZYX, same order as elsewhere)
             Rx = np.array([
                 [1, 0, 0],
                 [0, np.cos(rx), -np.sin(rx)],
@@ -350,28 +355,21 @@ class GuiTriangulateComponent(GuiComponent):
             # Combined rotation matrix
             rotation_matrix = Rz @ Ry @ Rx
             
-            # Camera forward direction - CORRECTED for OpenCV convention
-            # OpenCV camera coordinate system: Z points INTO the scene (positive Z)
-            forward = np.array([0.0, 0.0, 1.0])  # Positive Z forward (into scene)
-            world_forward = rotation_matrix @ forward
+            # For [R|t] with R mapping world->camera, the camera forward in world is R^T * [0,0,1]
+            forward_cam = np.array([0.0, 0.0, 1.0])  # camera Z axis
+            world_forward = rotation_matrix.T @ forward_cam
             
             # Scale the direction vector for visibility
             direction_end = position + world_forward * 0.5  # 0.5 meter direction indicator
             direction_end_2d = self._project_3d_to_2d(direction_end)
             
-            # Draw direction line
+            # Draw direction line and arrowhead
             cv2.line(canvas, position_2d, direction_end_2d, self.color_cameras, 2)
-            
-            # Draw a small arrow at the end
             direction_vector = np.array(direction_end_2d) - np.array(position_2d)
             if np.linalg.norm(direction_vector) > 0:
                 direction_vector = direction_vector / np.linalg.norm(direction_vector)
-                
-                # Arrow tip points
                 arrow_length = 8
                 arrow_angle = 0.5
-                
-                # Calculate arrow tip points
                 arrow_tip1 = direction_end_2d - arrow_length * (
                     direction_vector * np.cos(arrow_angle) + 
                     np.array([-direction_vector[1], direction_vector[0]]) * np.sin(arrow_angle)
@@ -380,7 +378,6 @@ class GuiTriangulateComponent(GuiComponent):
                     direction_vector * np.cos(arrow_angle) - 
                     np.array([-direction_vector[1], direction_vector[0]]) * np.sin(arrow_angle)
                 )
-                
                 cv2.line(canvas, direction_end_2d, tuple(arrow_tip1.astype(int)), self.color_cameras, 2)
                 cv2.line(canvas, direction_end_2d, tuple(arrow_tip2.astype(int)), self.color_cameras, 2)
     
@@ -518,9 +515,12 @@ class GuiTriangulateComponent(GuiComponent):
                      (self.width, self.height),
                      self.color_bg, -1)
         
-        # Auto-rotate for dynamic view
+        # Auto-rotate for dynamic view at constant speed (time-based)
+        now = time.monotonic()
+        dt = max(0.0, min(now - self._last_time, 0.1))  # clamp to avoid big jumps
+        self._last_time = now
         if self.auto_rotate:
-            self.rotation_y += self.rotation_speed
+            self.rotation_y += self.rotation_speed * dt
         
         # Draw scene elements (all drawing methods need to be updated to use canvas coordinates)
         self._draw_grid(self.canvas)

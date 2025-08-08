@@ -3,6 +3,7 @@ from typing import Dict, List, Optional
 from plugins.yolo_pose_plugin.data_structure import PoseData, Skeleton, Joint as YoloJoint, COCO_KEYPOINT_NAMES
 from .data_structure import Point2D, Point3D, Skeleton3D, PoseData3D, CoordinateConverter
 from .triangulate_points import TriangulatePoints
+from utils.logger_util.logger import get_logger
 
 class TriangulateYoloPose:
     """
@@ -13,6 +14,7 @@ class TriangulateYoloPose:
         """
         Initializes the TriangulateYoloPose class with a TriangulatePoints instance.
         """
+        self.logger = get_logger("TriangulateYoloPose")
         self.triangulator = TriangulatePoints()
 
     def triangulate_skeletons(self, pose_data_per_camera: Dict[str, PoseData]) -> PoseData3D:
@@ -58,9 +60,9 @@ class TriangulateYoloPose:
         """
         joints_3d: List[Point3D] = []
         
-        print(f"\n=== DEBUG: Reconstructing skeleton from {len(skeletons_2d)} cameras ===")
+        self.logger.debug(f"Reconstructing skeleton from {len(skeletons_2d)} cameras")
         for cam_name, skeleton in skeletons_2d.items():
-            print(f"Camera {cam_name}: {len(skeleton.joints)} joints detected")
+            self.logger.debug(f"Camera {cam_name}: {len(skeleton.joints)} joints detected")
 
         # Iterate through all possible joint types
         for joint_label in COCO_KEYPOINT_NAMES:
@@ -92,22 +94,26 @@ class TriangulateYoloPose:
             
             # Debug: Print 2D points for this joint
             if len(points_for_triangulation) >= 2:
-                print(f"\n--- Joint: {joint_label} ---")
+                self.logger.debug(f"Triangulating joint: {joint_label}")
                 for cam_name, pixel_point in points_for_triangulation.items():
                     # Get original normalized coordinates for comparison
                     joint_2d = self._find_joint_by_label(skeletons_2d[cam_name], joint_label)
-                    print(f"  {cam_name}: norm=({joint_2d.x:.3f}, {joint_2d.y:.3f}) -> pixel=({pixel_point.x:.0f}, {pixel_point.y:.0f}) conf={pixel_point.confidence:.2f}")
+                    self.logger.debug(
+                        f"  {cam_name}: norm=({joint_2d.x:.3f}, {joint_2d.y:.3f}) -> pixel=({pixel_point.x:.0f}, {pixel_point.y:.0f}) conf={pixel_point.confidence:.2f}"
+                    )
                 
                 point_3d = self.triangulator.triangulate_multi_camera(points_for_triangulation)
                 if point_3d:
-                    print(f"  -> 3D: ({point_3d.x:.3f}, {point_3d.y:.3f}, {point_3d.z:.3f}) conf={point_3d.confidence:.2f} error={point_3d.reprojection_error:.1f}px")
+                    self.logger.debug(
+                        f"  -> 3D: ({point_3d.x:.3f}, {point_3d.y:.3f}, {point_3d.z:.3f}) conf={point_3d.confidence:.2f} error={point_3d.reprojection_error:.1f}px"
+                    )
                     joints_3d.append(point_3d)
                 else:
-                    print(f"  -> 3D: FAILED")
+                    self.logger.debug("  -> 3D: FAILED")
             else:
-                print(f"{joint_label}: Only {len(points_for_triangulation)} cameras detected this joint")
+                self.logger.debug(f"{joint_label}: Only {len(points_for_triangulation)} cameras detected this joint")
 
-        print(f"\n=== Total triangulated joints: {len(joints_3d)} ===\n")
+        self.logger.debug(f"Total triangulated joints: {len(joints_3d)}")
 
         if not joints_3d:
             return None
