@@ -3,3 +3,4 @@ folder_path: plugins/triangulate_points_plugin
 type: plugin
 requirements: 
   - https://github.com/AI-Driven-Highspeed-Development/Logger-Util.git
+  - https://github.com/AI-Driven-Highspeed-Development/CV2-Visualization-Plugin.git
